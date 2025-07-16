@@ -262,6 +262,12 @@ IMPORTANT REQUIREMENTS:
     // Ensure initial state is correct
     this.showLoading(false);
     
+    // Add touch feedback for mobile
+    this.addTouchFeedback();
+    
+    // Handle mobile keyboard
+    this.handleMobileKeyboard();
+    
     // Generate button
     document.getElementById('generate-btn')!.addEventListener('click', async () => {
       const promptInput = document.getElementById('prompt') as HTMLTextAreaElement;
@@ -335,6 +341,74 @@ IMPORTANT REQUIREMENTS:
         document.getElementById('generate-btn')!.click();
       }
     });
+  }
+  
+  private addTouchFeedback(): void {
+    // Add haptic feedback for mobile devices
+    const addHapticFeedback = () => {
+      if ('vibrate' in navigator) {
+        navigator.vibrate(10);
+      }
+    };
+    
+    // Add touch feedback to buttons
+    document.querySelectorAll('.btn').forEach(btn => {
+      btn.addEventListener('touchstart', () => {
+        btn.classList.add('btn-pressed');
+        addHapticFeedback();
+      });
+      
+      btn.addEventListener('touchend', () => {
+        setTimeout(() => {
+          btn.classList.remove('btn-pressed');
+        }, 100);
+      });
+    });
+    
+    // Add touch feedback to tags
+    document.querySelectorAll('.tag').forEach(tag => {
+      tag.addEventListener('touchstart', () => {
+        tag.classList.add('tag-pressed');
+        addHapticFeedback();
+      });
+      
+      tag.addEventListener('touchend', () => {
+        setTimeout(() => {
+          tag.classList.remove('tag-pressed');
+        }, 100);
+      });
+    });
+    
+    // Prevent double-tap zoom on buttons
+    document.querySelectorAll('.btn, .tag').forEach(element => {
+      element.addEventListener('touchend', (e) => {
+        e.preventDefault();
+      });
+    });
+  }
+  
+  private handleMobileKeyboard(): void {
+    // Handle mobile keyboard appearing/disappearing
+    const viewport = document.querySelector('meta[name=viewport]') as HTMLMetaElement;
+    
+    if (viewport) {
+      // Detect if mobile keyboard is open
+      const initialHeight = window.innerHeight;
+      
+      window.addEventListener('resize', () => {
+        const currentHeight = window.innerHeight;
+        const keyboardHeight = initialHeight - currentHeight;
+        
+        if (keyboardHeight > 150) { // Keyboard is likely open
+          document.body.classList.add('keyboard-open');
+          // Adjust viewport for mobile keyboard
+          viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        } else {
+          document.body.classList.remove('keyboard-open');
+          viewport.content = 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no';
+        }
+      });
+    }
   }
 }
 

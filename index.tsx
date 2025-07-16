@@ -21,9 +21,16 @@ interface GeneratedSticker {
   options: StickerOptions;
 }
 
+interface DailyUsage {
+  date: string;
+  count: number;
+}
+
 class StickerMaker {
   private chat: any;
   private gallery: GeneratedSticker[] = [];
+  private dailyUsage: DailyUsage | null = null;
+  private readonly MAX_DAILY_GENERATIONS = 10;
   
   constructor() {
     this.chat = ai.chats.create({
@@ -35,14 +42,17 @@ class StickerMaker {
     });
     
     this.loadGallery();
+    this.loadDailyUsage();
     
     // Wait for DOM to be ready
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', () => {
         this.initializeEventListeners();
+        this.updateGenerateButton();
       });
     } else {
       this.initializeEventListeners();
+      this.updateGenerateButton();
     }
   }
   
@@ -130,13 +140,44 @@ IMPORTANT REQUIREMENTS:
     }
   }
   
-  private showError(message: string): void {
-    const errorToast = document.getElementById('error-toast')!;
-    errorToast.textContent = message;
-    errorToast.hidden = false;
+  private showToast(message: string, type: 'success' | 'error' | 'warning' = 'error'): void {
+    const toast = document.getElementById('toast')!;
+    const toastMessage = toast.querySelector('.toast-message')!;
+    const toastIcon = toast.querySelector('.toast-icon')!;
+    
+    // Update icon based on type
+    if (type === 'success') {
+      toastIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="M6 10L8.5 12.5L14 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      toastIcon.style.color = 'var(--success-500)';
+    } else if (type === 'warning') {
+      toastIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="M10 6V10" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+          <circle cx="10" cy="14" r="1" fill="currentColor"/>
+        </svg>
+      `;
+      toastIcon.style.color = 'var(--warning-500)';
+    } else {
+      toastIcon.innerHTML = `
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2"/>
+          <path d="M6 6L14 14M6 14L14 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      `;
+      toastIcon.style.color = 'var(--error-500)';
+    }
+    
+    toastMessage.textContent = message;
+    toast.style.display = 'block';
     
     setTimeout(() => {
-      errorToast.hidden = true;
+      toast.style.display = 'none';
     }, 5000);
   }
   
@@ -160,10 +201,12 @@ IMPORTANT REQUIREMENTS:
     const placeholder = document.querySelector('.preview-placeholder')!;
     const result = document.getElementById('preview-result')!;
     const stickerImage = document.getElementById('sticker-image') as HTMLImageElement;
+    const resultActions = document.getElementById('result-actions')!;
     
     (placeholder as HTMLElement).style.display = 'none';
     stickerImage.src = `data:image/png;base64,${imageData}`;
-    (result as HTMLElement).style.display = 'flex';
+    (result as HTMLElement).style.display = 'block';
+    (resultActions as HTMLElement).style.display = 'flex';
     
     // Store current sticker data for download
     (window as any).currentSticker = {
@@ -226,6 +269,121 @@ IMPORTANT REQUIREMENTS:
     }
   }
   
+  private loadDailyUsage(): void {
+    try {
+      const today = new Date().toDateString();
+      const saved = localStorage.getItem('daily-usage');
+      
+      if (saved) {
+        const usage = JSON.parse(saved) as DailyUsage;
+        if (usage.date === today) {
+          this.dailyUsage = usage;
+        } else {
+          // New day, reset count
+          this.dailyUsage = { date: today, count: 0 };
+          this.saveDailyUsage();
+        }
+      } else {
+        this.dailyUsage = { date: today, count: 0 };
+        this.saveDailyUsage();
+      }
+    } catch (error) {
+      console.error('Failed to load daily usage:', error);
+      this.dailyUsage = { date: new Date().toDateString(), count: 0 };
+    }
+  }
+  
+  private saveDailyUsage(): void {
+    try {
+      if (this.dailyUsage) {
+        localStorage.setItem('daily-usage', JSON.stringify(this.dailyUsage));
+      }
+    } catch (error) {
+      console.error('Failed to save daily usage:', error);
+    }
+  }
+  
+  private canGenerateToday(): boolean {
+    return this.dailyUsage ? this.dailyUsage.count < this.MAX_DAILY_GENERATIONS : false;
+  }
+  
+  private getRemainingGenerations(): number {
+    return this.dailyUsage ? this.MAX_DAILY_GENERATIONS - this.dailyUsage.count : 0;
+  }
+  
+  private incrementDailyUsage(): void {
+    if (this.dailyUsage) {
+      this.dailyUsage.count++;
+      this.saveDailyUsage();
+    }
+  }
+  
+  private updateGenerateButton(): void {
+    const btn = document.getElementById('generate-btn') as HTMLButtonElement;
+    const promptInput = document.getElementById('prompt') as HTMLTextAreaElement;
+    
+    if (!btn || !promptInput) return;
+    
+    const prompt = promptInput.value.trim();
+    const canGenerate = this.canGenerateToday();
+    const hasPrompt = prompt.length > 0;
+    
+    // Update button state
+    if (!hasPrompt) {
+      btn.disabled = true;
+      btn.title = 'Please enter a description for your sticker';
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+    } else if (!canGenerate) {
+      btn.disabled = true;
+      btn.title = 'Daily limit reached (10 generations per day)';
+      btn.style.opacity = '0.5';
+      btn.style.cursor = 'not-allowed';
+    } else {
+      btn.disabled = false;
+      btn.title = '';
+      btn.style.opacity = '1';
+      btn.style.cursor = 'pointer';
+    }
+    
+    // Update button text (simpler)
+    const btnText = btn.querySelector('.btn-text') as HTMLElement;
+    if (btnText) {
+      if (!canGenerate) {
+        btnText.textContent = 'Limit Harian Tercapai';
+      } else {
+        btnText.textContent = 'Generate Sticker';
+      }
+    }
+    
+    // Update remaining count display
+    this.updateRemainingDisplay();
+  }
+  
+  private updateRemainingDisplay(): void {
+    const remainingElement = document.getElementById('remaining-count');
+    if (!remainingElement) return;
+    
+    const remaining = this.getRemainingGenerations();
+    
+    if (remaining <= 2 && remaining > 0) {
+      remainingElement.textContent = `(sisa ${remaining} hari ini)`;
+      remainingElement.style.display = 'inline';
+    } else {
+      remainingElement.style.display = 'none';
+    }
+  }
+  
+  private scrollToPreview(): void {
+    const previewSection = document.querySelector('.preview-section') as HTMLElement;
+    if (previewSection) {
+      previewSection.scrollIntoView({ 
+        behavior: 'smooth', 
+        block: 'start' 
+      });
+    }
+  }
+  
   private showGallery(): void {
     const modal = document.getElementById('gallery-modal')!;
     const grid = document.getElementById('gallery-grid')!;
@@ -276,8 +434,16 @@ IMPORTANT REQUIREMENTS:
       const colorSelect = document.getElementById('color') as HTMLSelectElement;
       
       const prompt = promptInput.value.trim();
+      
+      // Validate prompt
       if (!prompt) {
-        this.showError('Please enter a description for your sticker');
+        this.showToast('Please enter a description for your sticker', 'warning');
+        return;
+      }
+      
+      // Check daily limit
+      if (!this.canGenerateToday()) {
+        this.showToast('Daily limit reached! You can generate 10 stickers per day', 'warning');
         return;
       }
       
@@ -292,8 +458,19 @@ IMPORTANT REQUIREMENTS:
       try {
         const imageData = await this.generateSticker(prompt, options);
         this.displaySticker(imageData, prompt, options);
+        
+        // Increment daily usage
+        this.incrementDailyUsage();
+        this.updateGenerateButton();
+        
+        this.showToast('Sticker generated successfully!', 'success');
+        
+        // Auto-scroll to preview section
+        setTimeout(() => {
+          this.scrollToPreview();
+        }, 100);
       } catch (error) {
-        this.showError('Failed to generate sticker. Please try again.');
+        this.showToast('Failed to generate sticker. Please try again.', 'error');
       } finally {
         this.showLoading(false);
       }
@@ -327,18 +504,27 @@ IMPORTANT REQUIREMENTS:
     });
     
     // Suggestion tags
-    document.querySelectorAll('.tag').forEach(tag => {
-      tag.addEventListener('click', () => {
-        const prompt = tag.getAttribute('data-prompt')!;
+    document.querySelectorAll('.suggestion-card').forEach(card => {
+      card.addEventListener('click', () => {
+        const prompt = card.getAttribute('data-prompt')!;
         (document.getElementById('prompt') as HTMLTextAreaElement).value = prompt;
+        this.updateGenerateButton();
       });
+    });
+    
+    // Update button state on prompt input
+    document.getElementById('prompt')!.addEventListener('input', () => {
+      this.updateGenerateButton();
     });
     
     // Enter key to generate
     document.getElementById('prompt')!.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
-        document.getElementById('generate-btn')!.click();
+        const btn = document.getElementById('generate-btn') as HTMLButtonElement;
+        if (!btn.disabled) {
+          btn.click();
+        }
       }
     });
   }

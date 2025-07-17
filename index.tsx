@@ -226,8 +226,8 @@ IMPORTANT REQUIREMENTS:
     link.download = `sticker-${Date.now()}.png`;
     link.click();
     
-    // Save to gallery
-    this.saveToGallery(currentSticker);
+    // Show download success toast
+    this.showToast('Sticker downloaded successfully!', 'success');
   }
   
   private saveToGallery(sticker: any): void {
@@ -254,6 +254,9 @@ IMPORTANT REQUIREMENTS:
       const saved = localStorage.getItem('sticker-gallery');
       if (saved) {
         this.gallery = JSON.parse(saved);
+        console.log('Gallery loaded successfully. Total items:', this.gallery.length);
+      } else {
+        console.log('No gallery data found in localStorage');
       }
     } catch (error) {
       console.error('Failed to load gallery:', error);
@@ -264,6 +267,7 @@ IMPORTANT REQUIREMENTS:
   private saveGallery(): void {
     try {
       localStorage.setItem('sticker-gallery', JSON.stringify(this.gallery));
+      console.log('Gallery saved successfully. Total items:', this.gallery.length);
     } catch (error) {
       console.error('Failed to save gallery:', error);
     }
@@ -390,6 +394,8 @@ IMPORTANT REQUIREMENTS:
     
     grid.innerHTML = '';
     
+    console.log('Opening gallery. Current gallery items:', this.gallery.length);
+    
     if (this.gallery.length === 0) {
       grid.innerHTML = '<p class="gallery-empty">No stickers yet. Generate your first sticker!</p>';
     } else {
@@ -458,6 +464,15 @@ IMPORTANT REQUIREMENTS:
       try {
         const imageData = await this.generateSticker(prompt, options);
         this.displaySticker(imageData, prompt, options);
+        
+        // Auto-save to gallery when sticker is generated
+        const stickerData = {
+          imageData,
+          prompt,
+          options,
+          timestamp: Date.now()
+        };
+        this.saveToGallery(stickerData);
         
         // Increment daily usage
         this.incrementDailyUsage();
